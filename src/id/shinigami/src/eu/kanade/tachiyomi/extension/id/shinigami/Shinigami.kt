@@ -102,7 +102,7 @@ abstract class Shinigami : KeiSource() {
             it.addToUri(url)
         }
 
-        val response = apiGet(url.build(), "search")
+        val response = apiGet(url.build().toString(), "search")
         return parseMangaList(response)
     }
 
