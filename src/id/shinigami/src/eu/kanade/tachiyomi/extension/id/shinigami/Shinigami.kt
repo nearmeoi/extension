@@ -20,6 +20,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.serialization.json.JsonElement
+import okhttp3.CacheControl
 import okhttp3.Headers
 import okhttp3.HttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrl
@@ -204,7 +205,10 @@ abstract class Shinigami : KeiSource() {
                 .apply { cursor?.let { addQueryParameter("cursor", it) } }
                 .build()
 
-            val result = client.get(url, apiHeaders, Fetch.XHR).parseAs<ShinigamiChapterListDto>()
+            // Chapter ids change when the site re-uploads a chapter; a cached page would serve dead ids
+            val result = client
+                .get(url, apiHeaders, Fetch.XHR, CacheControl.FORCE_NETWORK)
+                .parseAs<ShinigamiChapterListDto>()
             chapters.addAll(result.chapterList.map(::chapterFromObject))
 
             cursor = result.meta.nextCursor?.takeIf { it.isNotBlank() }
