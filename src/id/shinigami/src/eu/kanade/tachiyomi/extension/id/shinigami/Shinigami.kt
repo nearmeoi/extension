@@ -7,6 +7,7 @@ import eu.kanade.tachiyomi.source.model.SChapter
 import eu.kanade.tachiyomi.source.model.SManga
 import eu.kanade.tachiyomi.source.model.SMangaUpdate
 import keiyoushi.annotation.Source
+import keiyoushi.network.DEFAULT_CACHE_CONTROL
 import keiyoushi.network.Fetch
 import keiyoushi.network.get
 import keiyoushi.network.rateLimit
@@ -44,6 +45,16 @@ abstract class Shinigami : KeiSource() {
 
     override fun OkHttpClient.Builder.configureClient(): OkHttpClient.Builder = rateLimit(3) { it.host == "api.shinigami.io" }
 
+    /** The app only renders "HTTP error 404", so keep the failing URL in the message. */
+    private suspend fun apiGet(url: HttpUrl, cacheControl: CacheControl = DEFAULT_CACHE_CONTROL): Response = try {
+        client.get(url, apiHeaders, Fetch.XHR, cacheControl)
+    } catch (e: Exception) {
+        throw Exception("${e.message} @ $url", e)
+    }
+
+    private suspend fun apiGet(url: String, cacheControl: CacheControl = DEFAULT_CACHE_CONTROL): Response =
+        apiGet(url.toHttpUrl(), cacheControl)
+
     // ====================== Popular ======================
 
     override suspend fun getPopularManga(page: Int): MangasPage {
@@ -53,7 +64,7 @@ abstract class Shinigami : KeiSource() {
             .addQueryParameter("sort", "popularity")
             .build()
 
-        val response = client.get(url, apiHeaders, Fetch.XHR)
+        val response = apiGet(url)
         return parseMangaList(response)
     }
 
@@ -66,7 +77,7 @@ abstract class Shinigami : KeiSource() {
             .addQueryParameter("sort", "latest")
             .build()
 
-        val response = client.get(url, apiHeaders, Fetch.XHR)
+        val response = apiGet(url)
         return parseMangaList(response)
     }
 
@@ -90,7 +101,7 @@ abstract class Shinigami : KeiSource() {
             it.addToUri(url)
         }
 
-        val response = client.get(url.build(), apiHeaders, Fetch.XHR)
+        val response = apiGet(url.build())
         return parseMangaList(response)
     }
 
@@ -154,7 +165,7 @@ abstract class Shinigami : KeiSource() {
     }
 
     private suspend fun fetchMangaDetails(manga: SManga): SManga {
-        val response = client.get("$apiUrl/v1/manga/detail/${manga.url}", apiHeaders, Fetch.XHR)
+        val response = apiGet("$apiUrl/v1/manga/detail/${manga.url}")
         val mangaDetailsResponse = response.parseAs<ShinigamiMangaDetailDto>()
         val mangaDetails = mangaDetailsResponse.data
 
@@ -206,9 +217,7 @@ abstract class Shinigami : KeiSource() {
                 .build()
 
             // Chapter ids change when the site re-uploads a chapter; a cached page would serve dead ids
-            val result = client
-                .get(url, apiHeaders, Fetch.XHR, CacheControl.FORCE_NETWORK)
-                .parseAs<ShinigamiChapterListDto>()
+            val result = apiGet(url, CacheControl.FORCE_NETWORK).parseAs<ShinigamiChapterListDto>()
             chapters.addAll(result.chapterList.map(::chapterFromObject))
 
             cursor = result.meta.nextCursor?.takeIf { it.isNotBlank() }
@@ -232,7 +241,7 @@ abstract class Shinigami : KeiSource() {
             throw Exception("Migrate dari $name ke $name (ekstensi yang sama)")
         }
 
-        val response = client.get("$apiUrl/v1/chapter/detail/${chapter.url}", apiHeaders, Fetch.XHR)
+        val response = apiGet("$apiUrl/v1/chapter/detail/${chapter.url}")
         val result = response.parseAs<ShinigamiPageListDto>()
 
         return result.pageList.chapterPage.pages.mapIndexed { index, imageName ->
@@ -258,10 +267,8 @@ abstract class Shinigami : KeiSource() {
     override val supportsFilterFetching = true
 
     override suspend fun fetchFilterData(): JsonElement = coroutineScope {
-        suspend fun fetchTaxonomy(type: String): TaxonomyListDto = client.get(
+        suspend fun fetchTaxonomy(type: String): TaxonomyListDto = apiGet(
             "$apiUrl/v1/taxonomy/list?type=$type&limit=100&offset=0",
-            apiHeaders,
-            Fetch.XHR,
         ).parseAs<TaxonomyListDto>()
 
         val (genres, themes) = listOf(
