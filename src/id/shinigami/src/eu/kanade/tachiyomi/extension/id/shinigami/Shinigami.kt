@@ -41,7 +41,7 @@ abstract class Shinigami : KeiSource() {
             .add("Sec-GPC", "1")
             .build()
 
-    override fun OkHttpClient.Builder.configureClient(): OkHttpClient.Builder = rateLimit(3)
+    override fun OkHttpClient.Builder.configureClient(): OkHttpClient.Builder = rateLimit(3) { it.host == "api.shinigami.io" }
 
     // ====================== Popular ======================
 
