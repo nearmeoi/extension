@@ -199,6 +199,8 @@ abstract class Shinigami : KeiSource() {
 
         while (true) {
             val url = "$apiUrl/v1/chapter/${manga.url}/list".toHttpUrl().newBuilder()
+                // API default is 12 per page; a 500+ chapter series otherwise needs ~50 round trips
+                .addQueryParameter("limit", "1000")
                 .apply { cursor?.let { addQueryParameter("cursor", it) } }
                 .build()
 
