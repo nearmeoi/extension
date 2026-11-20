@@ -45,14 +45,16 @@ abstract class Shinigami : KeiSource() {
 
     override fun OkHttpClient.Builder.configureClient(): OkHttpClient.Builder = rateLimit(3) { it.host == "api.shinigami.io" }
 
-    /** The app only renders "HTTP error 404", so keep the failing URL in the message. */
-    private suspend fun apiGet(url: HttpUrl, cacheControl: CacheControl = DEFAULT_CACHE_CONTROL): Response = try {
+    /** The app truncates long errors, so tag which call failed instead of dumping the URL. */
+    private suspend fun apiGet(
+        url: String,
+        tag: String,
+        cacheControl: CacheControl = DEFAULT_CACHE_CONTROL,
+    ): Response = try {
         client.get(url, apiHeaders, Fetch.XHR, cacheControl)
     } catch (e: Exception) {
-        throw Exception("${e.message} @ $url", e)
+        throw Exception("$tag: ${e.message}", e)
     }
-
-    private suspend fun apiGet(url: String, cacheControl: CacheControl = DEFAULT_CACHE_CONTROL): Response = apiGet(url.toHttpUrl(), cacheControl)
 
     // ====================== Popular ======================
 
@@ -63,7 +65,7 @@ abstract class Shinigami : KeiSource() {
             .addQueryParameter("sort", "popularity")
             .build()
 
-        val response = apiGet(url)
+        val response = apiGet(url.toString(), "popular")
         return parseMangaList(response)
     }
 
@@ -76,7 +78,7 @@ abstract class Shinigami : KeiSource() {
             .addQueryParameter("sort", "latest")
             .build()
 
-        val response = apiGet(url)
+        val response = apiGet(url.toString(), "latest")
         return parseMangaList(response)
     }
 
@@ -100,7 +102,7 @@ abstract class Shinigami : KeiSource() {
             it.addToUri(url)
         }
 
-        val response = apiGet(url.build())
+        val response = apiGet(url.build(), "search")
         return parseMangaList(response)
     }
 
@@ -164,7 +166,7 @@ abstract class Shinigami : KeiSource() {
     }
 
     private suspend fun fetchMangaDetails(manga: SManga): SManga {
-        val response = apiGet("$apiUrl/v1/manga/detail/${manga.url}")
+        val response = apiGet("$apiUrl/v1/manga/detail/${manga.url}", "manga")
         val mangaDetailsResponse = response.parseAs<ShinigamiMangaDetailDto>()
         val mangaDetails = mangaDetailsResponse.data
 
@@ -216,7 +218,7 @@ abstract class Shinigami : KeiSource() {
                 .build()
 
             // Chapter ids change when the site re-uploads a chapter; a cached page would serve dead ids
-            val result = apiGet(url, CacheControl.FORCE_NETWORK).parseAs<ShinigamiChapterListDto>()
+            val result = apiGet(url.toString(), "chapters", CacheControl.FORCE_NETWORK).parseAs<ShinigamiChapterListDto>()
             chapters.addAll(result.chapterList.map(::chapterFromObject))
 
             cursor = result.meta.nextCursor?.takeIf { it.isNotBlank() }
@@ -240,7 +242,7 @@ abstract class Shinigami : KeiSource() {
             throw Exception("Migrate dari $name ke $name (ekstensi yang sama)")
         }
 
-        val response = apiGet("$apiUrl/v1/chapter/detail/${chapter.url}")
+        val response = apiGet("$apiUrl/v1/chapter/detail/${chapter.url}", "pages")
         val result = response.parseAs<ShinigamiPageListDto>()
 
         return result.pageList.chapterPage.pages.mapIndexed { index, imageName ->
@@ -268,6 +270,7 @@ abstract class Shinigami : KeiSource() {
     override suspend fun fetchFilterData(): JsonElement = coroutineScope {
         suspend fun fetchTaxonomy(type: String): TaxonomyListDto = apiGet(
             "$apiUrl/v1/taxonomy/list?type=$type&limit=100&offset=0",
+            "filter",
         ).parseAs<TaxonomyListDto>()
 
         val (genres, themes) = listOf(
