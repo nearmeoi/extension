@@ -52,8 +52,7 @@ abstract class Shinigami : KeiSource() {
         throw Exception("${e.message} @ $url", e)
     }
 
-    private suspend fun apiGet(url: String, cacheControl: CacheControl = DEFAULT_CACHE_CONTROL): Response =
-        apiGet(url.toHttpUrl(), cacheControl)
+    private suspend fun apiGet(url: String, cacheControl: CacheControl = DEFAULT_CACHE_CONTROL): Response = apiGet(url.toHttpUrl(), cacheControl)
 
     // ====================== Popular ======================
 
